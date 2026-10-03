@@ -1,0 +1,191 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Login Threat Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;800&display=swap">
+<style>
+/* Layout: four input toggles feed a three-stage rule chain that ends in one verdict. Dark by choice, like a security console. */
+:root{
+  --bg:#070B14; --panel:#0D1626; --panel-2:#101B30; --line:#1E3050;
+  --fg:#E8EEF8; --muted:#9DB0CC; --dim:#5E7090;
+  --cyan:#22D3EE; --amber:#F2B84B; --red:#F0525B;
+  --amber-bg:#231C0C; --red-bg:#2A1015; --cyan-bg:#0F2238;
+  --display:'Orbitron','Arial',sans-serif; --body:'Inter','Arial',sans-serif; --mono:'JetBrains Mono','Courier New',monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.5;padding-inline:20px;padding-block:28px 48px}
+.wrap{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.eyebrow{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.28em;color:var(--cyan);text-transform:uppercase}
+h1{font-family:var(--display);font-size:clamp(24px,4vw,36px);font-weight:800;line-height:1.15;text-wrap:balance}
+.tools{display:flex;gap:10px;flex-wrap:wrap}
+.tools button{font:600 14px var(--body);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;cursor:pointer}
+.tools button:hover{border-color:var(--cyan)}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.label{font-size:13px;font-weight:600;letter-spacing:.16em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.toggles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.toggle{display:flex;flex-direction:column;gap:10px;text-align:left;font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;cursor:pointer;transition:border-color .25s,background .25s}
+.toggle .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.toggle .sym{font-family:var(--mono);font-weight:700;font-size:22px}
+.toggle .name{font-size:17px;font-weight:600;line-height:1.25}
+.pill{font-size:13px;font-weight:700;letter-spacing:.08em;padding:3px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted);transition:all .25s}
+.toggle.on{border-color:var(--cyan);background:var(--cyan-bg)}
+.toggle.on .sym{color:var(--cyan)}
+.toggle.on .pill{background:var(--cyan);border-color:var(--cyan);color:var(--bg)}
+.toggle .val{font-family:var(--mono);font-size:15px;color:var(--muted)}
+.toggle.on .val{color:var(--cyan)}
+.chain{display:flex;align-items:stretch;gap:0}
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 16px}
+.stage .rule{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.24em;color:var(--cyan)}
+.stage .expr{font-family:var(--mono);font-size:18px;color:var(--fg)}
+.stage .eq{font-family:var(--mono);font-size:clamp(22px,3vw,30px);font-weight:700;color:var(--cyan);transition:color .3s}
+.stage .out{font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.06em;padding:12px 14px;border-radius:10px;border:2px solid var(--line);color:var(--dim);transition:all .35s}
+.stage.false .eq{color:var(--muted)}
+.stage.idle{opacity:.55}
+.stage.fired.warn .out{border-color:var(--amber);background:var(--amber-bg);color:var(--amber)}
+.stage.fired.crit .out{border-color:var(--red);background:var(--red-bg);color:var(--red)}
+.stage.fired.block .out{border-color:var(--red);background:var(--red);color:var(--bg)}
+.link{flex:0 0 36px;align-self:center;height:2px;background:var(--line);position:relative}
+.link::after{content:"";position:absolute;right:-1px;top:-5px;border-left:9px solid var(--line);border-top:6px solid transparent;border-bottom:6px solid transparent}
+.link.live{background:var(--cyan)}
+.link.live::after{border-left-color:var(--cyan)}
+.verdict{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;border:2px solid var(--cyan);background:var(--cyan-bg);border-radius:18px;padding:22px 26px;transition:all .35s}
+.verdict .big{font-family:var(--display);font-size:clamp(26px,4.2vw,42px);font-weight:800;line-height:1.1}
+.verdict .why{font-family:var(--mono);font-size:15px;color:var(--muted);max-width:46ch}
+.verdict.allow{border-color:var(--cyan)}
+.verdict.warn{border-color:var(--amber);background:var(--amber-bg)}
+.verdict.warn .big{color:var(--amber)}
+.verdict.crit{border-color:var(--red);background:var(--red-bg)}
+.verdict.crit .big{color:var(--red)}
+.verdict.block{border-color:var(--red);background:var(--red)}
+.verdict.block .big,.verdict.block .why{color:var(--bg)}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;font-family:var(--mono);font-size:14px;color:var(--muted)}
+.rules div{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+@media (max-width:820px){
+  .toggles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chain{flex-direction:column}
+  .link{flex:0 0 28px;width:2px;height:28px;align-self:center}
+  .link::after{right:auto;left:-5px;top:auto;bottom:-1px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid var(--line);border-bottom:0}
+  .link.live::after{border-top-color:var(--cyan);border-left-color:transparent}
+  .rules{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Propositional logic · live demo</p>
+      <h1>Login Threat Engine</h1>
+    </div>
+    <div class="tools">
+      <button id="btn-all" type="button">All YES</button>
+      <button id="btn-q" type="button">Set Q = NO</button>
+    </div>
+  </header>
+
+  <section>
+    <p class="label">Inputs · click to flip</p>
+    <div class="toggles" id="toggles"></div>
+  </section>
+
+  <section>
+    <p class="label">Reasoning chain</p>
+    <div class="chain" id="chain"></div>
+  </section>
+
+  <section class="verdict allow" id="verdict" aria-live="polite">
+    <div class="big" id="verdict-text">ALLOW</div>
+    <div class="why" id="verdict-why"></div>
+  </section>
+
+  <div class="rules">
+    <div>Rule 1: (P ∧ Q) → Suspicious Login</div>
+    <div>Rule 2: (Suspicious ∧ R) → HIGH RISK</div>
+    <div>Rule 3: (HIGH RISK ∧ S) → BLOCK ACCESS</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var inputs = [
+    { k: 'P', name: 'Unusual Location' },
+    { k: 'Q', name: 'Multiple Failed Attempts' },
+    { k: 'R', name: 'Sensitive Account' },
+    { k: 'S', name: 'Untrusted Device' }
+  ];
+  var st = { P: true, Q: true, R: true, S: true };
+  var stages = [
+    { rule: 'RULE 1', expr: 'P ∧ Q', out: 'SUSPICIOUS LOGIN', cls: 'warn' },
+    { rule: 'RULE 2', expr: 'Suspicious ∧ R', out: 'HIGH RISK', cls: 'crit' },
+    { rule: 'RULE 3', expr: 'HIGH RISK ∧ S', out: 'ACCESS BLOCKED', cls: 'block' }
+  ];
+  var tg = document.getElementById('toggles');
+  var ch = document.getElementById('chain');
+
+  inputs.forEach(function (it) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'toggle'; b.id = 't-' + it.k;
+    b.setAttribute('role', 'switch');
+    b.innerHTML = '<span class="top"><span class="sym">' + it.k + '</span><span class="pill"></span></span>' +
+      '<span class="name">' + it.name + '</span><span class="val"></span>';
+    b.addEventListener('click', function () { st[it.k] = !st[it.k]; render(); });
+    tg.appendChild(b);
+  });
+
+  stages.forEach(function (s, i) {
+    if (i > 0) { var l = document.createElement('div'); l.className = 'link'; l.id = 'link-' + i; ch.appendChild(l); }
+    var d = document.createElement('div');
+    d.className = 'stage'; d.id = 'stage-' + i;
+    d.innerHTML = '<div class="rule">' + s.rule + '</div><div class="expr">' + s.expr + '</div>' +
+      '<div class="eq"></div><div class="out">' + s.out + '</div>';
+    ch.appendChild(d);
+  });
+
+  function tf(v) { return v ? 'T' : 'F'; }
+
+  function render() {
+    var susp = st.P && st.Q;
+    var high = susp && st.R;
+    var block = high && st.S;
+    var lefts = [st.P, susp, high], rights = [st.Q, st.R, st.S], outs = [susp, high, block];
+
+    inputs.forEach(function (it) {
+      var b = document.getElementById('t-' + it.k), on = st[it.k];
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+      b.querySelector('.pill').textContent = on ? 'YES' : 'NO';
+      b.querySelector('.val').textContent = it.k + ' = ' + (on ? 'TRUE' : 'FALSE');
+    });
+
+    stages.forEach(function (s, i) {
+      var el = document.getElementById('stage-' + i);
+      el.style.transitionDelay = (i * 120) + 'ms';
+      el.querySelector('.out').style.transitionDelay = (i * 120) + 'ms';
+      el.querySelector('.eq').textContent = tf(lefts[i]) + ' ∧ ' + tf(rights[i]) + ' = ' + tf(outs[i]);
+      el.classList.toggle('false', !outs[i]);
+      el.classList.toggle('fired', outs[i]);
+      el.classList.remove('warn', 'crit', 'block');
+      if (outs[i]) el.classList.add(s.cls);
+      el.classList.toggle('idle', i > 0 && !lefts[i]);
+      if (i > 0) document.getElementById('link-' + i).classList.toggle('live', outs[i - 1]);
+    });
+
+    var v = document.getElementById('verdict'), t, why, cls;
+    if (block) { t = 'ACCESS BLOCKED'; cls = 'block'; why = 'T ∧ T = T at every stage. All three rules fired.'; }
+    else if (high) { t = 'HIGH RISK'; cls = 'crit'; why = 'Rules 1 and 2 fired. Rule 3 needs S = TRUE, so access is not blocked.'; }
+    else if (susp) { t = 'SUSPICIOUS'; cls = 'warn'; why = 'Rule 1 fired. Rule 2 needs R = TRUE, so the login is flagged only.'; }
+    else { t = 'ALLOW'; cls = 'allow'; why = 'P ∧ Q = ' + tf(st.P) + ' ∧ ' + tf(st.Q) + ' = F. No alert from this rule, so the chain stops.'; }
+    v.className = 'verdict ' + cls;
+    document.getElementById('verdict-text').textContent = t;
+    document.getElementById('verdict-why').textContent = why;
+  }
+
+  document.getElementById('btn-all').addEventListener('click', function () { st = { P: true, Q: true, R: true, S: true }; render(); });
+  document.getElementById('btn-q').addEventListener('click', function () { st = { P: true, Q: false, R: true, S: true }; render(); });
+  render();
+})();
+</script>
+
+</body></html>
